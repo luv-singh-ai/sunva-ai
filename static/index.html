@@ -176,7 +176,7 @@
                     timeSlice: 20000, // Get data every 20 seconds
                     ondataavailable: (blob) => {
                         if (blob && blob.size > 0) {
-                            audioChunks.push(blob);
+                            audioChunks.push(blob.slice(0, blob.size, 'audio/wav'));
                             sendAudioChunks();
                         }
                     }
@@ -189,7 +189,7 @@
             }
         }
 
-        function stopRecording() {
+        async function stopRecording() {
             console.log('Stopping recording...');
             if (recorder && recorder.getState() !== 'inactive') {
                 recorder.stopRecording(() => {
@@ -201,26 +201,39 @@
         async function sendAudioChunks() {
             if (audioChunks.length > 0) {
                 console.log('Sending audio chunks');
-                const audioBlob = audioChunks.shift();
-                const arrayBuffer = await audioBlob.arrayBuffer();
-                const base64String = arrayBufferToBase64(arrayBuffer);
-                console.log('Base64 audio data length:', base64String.length);
-                transcribeSocket.send(JSON.stringify({ audio: base64String }));
+                const audioData = await Promise.all(audioChunks.map(async (chunk) => await chunk.arrayBuffer()));
+                const concatenatedAudio = new Uint8Array(audioData.reduce((acc, curr) => acc + curr.byteLength, 0));
+                let offset = 0;
+                for (const buffer of audioData) {
+                    concatenatedAudio.set(new Uint8Array(buffer), offset);
+                    offset += buffer.byteLength;
+                }
+                transcribeSocket.send(concatenatedAudio);
+                audioChunks = [];
                 console.log('Sent audio data to server');
+                transcribeSocket.send(new Uint8Array([])); // Signal the end of audio data
             } else {
                 console.log('No audio chunks to send');
             }
         }
 
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return window.btoa(binary);
-        }
+        // async function sendAudioChunks() {
+        //     if (audioChunks.length > 0) {
+        //         console.log('Sending audio chunks');
+        //         const audioData = await Promise.all(audioChunks.map(async (chunk) => await chunk.arrayBuffer()));
+        //         const concatenatedAudio = new Uint8Array(audioData.reduce((acc, curr) => acc + curr.byteLength, 0));
+        //         let offset = 0;
+        //         for (const buffer of audioData) {
+        //             concatenatedAudio.set(new Uint8Array(buffer), offset);
+        //             offset += buffer.byteLength;
+        //         }
+        //         transcribeSocket.send(concatenatedAudio);
+        //         audioChunks = [];
+        //         console.log('Sent audio data to server');
+        //     } else {
+        //         console.log('No audio chunks to send');
+        //     }
+        // }
 
         function formatProcessedText(text) {
             return text.replace(/\*(.*?)\*/g, '<b>$1</b>');
