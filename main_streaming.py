@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from core.ai.speech import speech_to_text_groq, text_to_speech
 from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.exceptions import HTTPException
 from core.ai.text import process_transcription
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
@@ -128,6 +129,8 @@ async def tts_websocket(websocket: WebSocket):
                 print("No audio data received from text_to_speech")
     except WebSocketDisconnect:
         print("TTS client disconnected")
+
+        
 @app.get("/")
 async def get():
     return FileResponse("static/index.html")
